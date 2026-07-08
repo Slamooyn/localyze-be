@@ -1,10 +1,29 @@
+from contextlib import asynccontextmanager
+
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import health
+from app.db import SessionLocal
+from app.routers import analyses, categories, geocode, health, places, regions
+from app.services import baseline
 
-app = FastAPI(title="Localyze API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Warm the percentile baselines from the seeded snapshot so the first request
+    # is fast. Tolerate an empty/unseeded DB so the server still starts.
+    db = SessionLocal()
+    try:
+        baseline.get(db)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[startup] baseline warmup skipped: {exc}")
+    finally:
+        db.close()
+    yield
+
+
+app = FastAPI(title="Localyze API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,9 +34,9 @@ app.add_middleware(
 )
 
 api_v1 = APIRouter(prefix="/api/v1")
-api_v1.include_router(health.router)
-# Additional routers (categories, regions, geocode, places, analyses, discovery,
-# outlets) are registered here as each milestone lands.
+for r in (health, categories, regions, geocode, places, analyses):
+    api_v1.include_router(r.router)
+# discovery (M5) and outlets (M6) are registered as those milestones land.
 app.include_router(api_v1)
 
 
