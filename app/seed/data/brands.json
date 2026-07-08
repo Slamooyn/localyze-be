@@ -1,0 +1,30 @@
+[
+  {"name": "Kopi Kenangan", "category_slug": "coffee-grab-go", "is_chain": true},
+  {"name": "Fore Coffee", "category_slug": "coffee-grab-go", "is_chain": true},
+  {"name": "Janji Jiwa", "category_slug": "coffee-grab-go", "is_chain": true},
+  {"name": "Starbucks", "category_slug": "coffee-grab-go", "is_chain": true},
+  {"name": "Point Coffee", "category_slug": "coffee-grab-go", "is_chain": true},
+  {"name": "Flash Coffee", "category_slug": "coffee-grab-go", "is_chain": true},
+  {"name": "Tomoro Coffee", "category_slug": "coffee-grab-go", "is_chain": true},
+  {"name": "Kopi Tuku", "category_slug": "coffee-grab-go", "is_chain": false},
+  {"name": "Kopi Soe", "category_slug": "coffee-grab-go", "is_chain": true},
+  {"name": "Excelso", "category_slug": "coffee-grab-go", "is_chain": true},
+  {"name": "Kopi Lain Hati", "category_slug": "coffee-grab-go", "is_chain": true},
+  {"name": "Warkop Independen", "category_slug": "coffee-grab-go", "is_chain": false},
+
+  {"name": "Simply Fresh Laundry", "category_slug": "laundry", "is_chain": true},
+  {"name": "Melia Laundry", "category_slug": "laundry", "is_chain": true},
+  {"name": "The Laundry Club", "category_slug": "laundry", "is_chain": false},
+  {"name": "Kanaya Laundry", "category_slug": "laundry", "is_chain": false},
+  {"name": "Laundry Koin Express", "category_slug": "laundry", "is_chain": false},
+  {"name": "Fresh & Clean Laundry", "category_slug": "laundry", "is_chain": false},
+  {"name": "Wardrobe Laundry", "category_slug": "laundry", "is_chain": false},
+
+  {"name": "Indomaret", "category_slug": "minimarket", "is_chain": true},
+  {"name": "Alfamart", "category_slug": "minimarket", "is_chain": true},
+  {"name": "Alfamidi", "category_slug": "minimarket", "is_chain": true},
+  {"name": "Circle K", "category_slug": "minimarket", "is_chain": true},
+  {"name": "Lawson", "category_slug": "minimarket", "is_chain": true},
+  {"name": "FamilyMart", "category_slug": "minimarket", "is_chain": true},
+  {"name": "Toko Kelontong", "category_slug": "minimarket", "is_chain": false}
+]
