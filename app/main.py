@@ -5,7 +5,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db import SessionLocal
-from app.routers import analyses, categories, geocode, health, places, regions
+from app.routers import (
+    analyses,
+    categories,
+    discovery,
+    geocode,
+    health,
+    places,
+    regions,
+)
 from app.services import baseline
 
 
@@ -34,9 +42,9 @@ app.add_middleware(
 )
 
 api_v1 = APIRouter(prefix="/api/v1")
-for r in (health, categories, regions, geocode, places, analyses):
+for r in (health, categories, regions, geocode, places, analyses, discovery):
     api_v1.include_router(r.router)
-# discovery (M5) and outlets (M6) are registered as those milestones land.
+# outlets (M6) is registered as that milestone lands.
 app.include_router(api_v1)
 
 

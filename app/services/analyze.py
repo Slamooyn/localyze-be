@@ -228,6 +228,67 @@ def run_analysis(
     }
 
 
+def score_point(
+    db: Session,
+    lat: float,
+    lng: float,
+    category: FranchiseCategory,
+    radius_m: int | None = None,
+) -> tuple[float, float, float] | None:
+    """Lean scorer for the discovery grid — returns (composite, demand, competition)
+    with no cannibalization and no breakdown construction. Reuses the same pure
+    scoring functions as run_analysis so the grid is consistent with live analyses."""
+    region = geo.point_in_region(db, lat, lng)
+    if region is None:
+        return None
+    demo = geo.get_demographics(db, region["id"])
+    bl = baseline.get(db)
+    cb = bl.per_category[category.id]
+
+    tau = category.decay_tau_m
+    radius = radius_m or category.default_radius_m
+    w = category.scoring_weights
+    dfw, cfw, aw, pillars = (
+        w["demand_factors"],
+        w["competition_factors"],
+        w["anchor_type_weights"],
+        w["pillars"],
+    )
+
+    density = _num(demo["density_per_km2"]) if demo else (median(bl.density) if bl.density else 0)
+    d1 = sc.percentile(density, bl.density)
+    d2 = sc.demographic_match(
+        demo["age_distribution"] if demo else {},
+        category.target_demo_profile.get("age_weights", {}),
+    )
+    pp_raw = demo["purchasing_power_index"] if demo else None
+    d3 = sc.percentile(_num(pp_raw), bl.pp) if pp_raw is not None else 50.0
+    anchors = geo.anchors_in_radius(db, lat, lng, radius)
+    araw = sc.anchor_raw([(a["distance_m"], a["anchor_type"]) for a in anchors], tau, aw)
+    d4 = sc.percentile(araw, cb.anchor_raw)
+    demand = sc.weighted_sum(
+        dfw,
+        {"population_density": d1, "demographic_match": d2, "purchasing_power": d3, "anchor_poi": d4},
+    )
+
+    comps = geo.competitors_in_radius(db, lat, lng, category.id, radius)
+    pressure = sc.competitive_pressure([(c["distance_m"], c["is_chain"]) for c in comps], tau)
+    c1 = 100.0 - sc.percentile(pressure, cb.pressure)
+    if demo and demo["population"]:
+        c2 = 100.0 - sc.percentile(len(comps) / demo["population"], cb.per_capita)
+    else:
+        c2 = 50.0
+    nearest = geo.nearest_competitor_distance(db, lat, lng, category.id)
+    c3 = sc.percentile(nearest, cb.nearest) if nearest is not None else 100.0
+    competition = sc.weighted_sum(
+        cfw,
+        {"weighted_density": c1, "per_capita_intensity": c2, "nearest_distance": c3},
+    )
+
+    composite = sc.clamp(pillars["demand"] * demand + pillars["competition"] * competition)
+    return round(composite, 2), round(demand, 2), round(competition, 2)
+
+
 def db_snapshot_date(db: Session) -> date | None:
     from sqlalchemy import text
 

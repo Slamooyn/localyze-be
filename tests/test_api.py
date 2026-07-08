@@ -79,6 +79,24 @@ def test_analysis_crud_and_compare():
     assert client.get(f"/api/v1/analyses/{a['id']}").status_code == 404
 
 
+def test_discovery_returns_varied_ranked_cells():
+    districts = client.get("/api/v1/regions?level=district").json()
+    assert districts
+    rid = districts[0]["id"]
+    r = client.get(f"/api/v1/discovery?category_slug=coffee-grab-go&region_id={rid}&limit=10")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    top = body["top_locations"]
+    assert 1 <= len(top) <= 10
+    # ranked descending by composite
+    scores = [t["score_composite"] for t in top]
+    assert scores == sorted(scores, reverse=True)
+    # not all identical (variety)
+    assert len(set(round(s) for s in scores)) > 1 or len(top) == 1
+    assert body["heatmap"]["features"]
+    assert "computed_at" in body
+
+
 @pytest.mark.parametrize("q", ["tebet", "kopi"])
 def test_geocode(q):
     r = client.get(f"/api/v1/geocode?q={q}")
