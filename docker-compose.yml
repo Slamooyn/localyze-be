@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: localyze
+      POSTGRES_USER: localyze
+      POSTGRES_PASSWORD: localyze
+    ports: ["5433:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U localyze -d localyze"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  pgdata:
