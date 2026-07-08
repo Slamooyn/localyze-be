@@ -11,6 +11,7 @@ from app.routers import (
     discovery,
     geocode,
     health,
+    outlets,
     places,
     regions,
 )
@@ -42,9 +43,8 @@ app.add_middleware(
 )
 
 api_v1 = APIRouter(prefix="/api/v1")
-for r in (health, categories, regions, geocode, places, analyses, discovery):
+for r in (health, categories, regions, geocode, places, analyses, discovery, outlets):
     api_v1.include_router(r.router)
-# outlets (M6) is registered as that milestone lands.
 app.include_router(api_v1)
 
 

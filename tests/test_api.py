@@ -97,6 +97,47 @@ def test_discovery_returns_varied_ranked_cells():
     assert "computed_at" in body
 
 
+def test_outlet_import_validation_and_cannibalization():
+    # baseline analysis without any outlets
+    client.delete("/api/v1/outlets")
+    before = client.post(
+        "/api/v1/analyses",
+        json={**TEBET, "category_slug": "coffee-grab-go", "include_cannibalization": True},
+    ).json()
+
+    csv_body = (
+        "name,lat,lng,address\n"
+        "Outlet Tebet 1,-6.2270,106.8535,Jl Tebet\n"       # ~70m away
+        "Outlet Tebet 2,-6.2300,106.8500,Jl Tebet Barat\n"  # ~500m away
+        "Bad Row,notalat,106.85,broken\n"                   # invalid lat -> skipped
+    )
+    r = client.post(
+        "/api/v1/outlets/import",
+        files={"file": ("outlets.csv", csv_body, "text/csv")},
+    )
+    assert r.status_code == 200, r.text
+    rep = r.json()
+    assert rep["imported"] == 2
+    assert any(s["reason"] == "invalid lat" for s in rep["skipped"])
+
+    # outlets appear on the layer
+    layer = client.get("/api/v1/outlets").json()
+    assert len(layer["features"]) == 2
+
+    # re-analyze: cannibalization penalty now applies -> composite drops
+    after = client.post(
+        "/api/v1/analyses",
+        json={**TEBET, "category_slug": "coffee-grab-go", "include_cannibalization": True},
+    ).json()
+    assert after["score"]["cannibalization_penalty"] > 0
+    assert after["score"]["composite"] < before["score"]["composite"]
+    assert after["breakdown"]["cannibalization"]["affected_outlets"]
+
+    # cleanup
+    client.delete(f"/api/v1/outlets?import_batch={rep['import_batch']}")
+    assert client.get("/api/v1/outlets").json()["features"] == []
+
+
 @pytest.mark.parametrize("q", ["tebet", "kopi"])
 def test_geocode(q):
     r = client.get(f"/api/v1/geocode?q={q}")
