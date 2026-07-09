@@ -7,6 +7,7 @@ from app.config import settings
 from app.db import SessionLocal
 from app.routers import (
     analyses,
+    auth,
     categories,
     discovery,
     geocode,
@@ -43,7 +44,7 @@ app.add_middleware(
 )
 
 api_v1 = APIRouter(prefix="/api/v1")
-for r in (health, categories, regions, geocode, places, analyses, discovery, outlets):
+for r in (auth, health, categories, regions, geocode, places, analyses, discovery, outlets):
     api_v1.include_router(r.router)
 app.include_router(api_v1)
 

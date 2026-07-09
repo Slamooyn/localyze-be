@@ -24,12 +24,28 @@ curl -X POST localhost:8000/api/v1/analyses -H 'Content-Type: application/json' 
   -d '{"lat":-6.2264,"lng":106.8531,"category_slug":"coffee-grab-go"}'
 ```
 
+## Auth
+
+`/analyses*` and `/outlets*` require a JWT bearer token; reference/geospatial endpoints
+are public. Register/login return `{token, user}`.
+
+```bash
+# demo account (seeded): 2 sample analyses + 3 outlets
+curl -X POST localhost:8000/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"demo@localyze.id","password":"demo1234"}'
+```
+
+Token: HS256, `sub`=user id, 7-day expiry, secret via `JWT_SECRET` env.
+
 ## Notes / deviations from spec
 
 - **Sync SQLAlchemy 2.0 + psycopg3** instead of async. `tech-stack-backend.md` §1.5
   calls async a *bonus, not a requirement*; sync keeps Alembic, the seed scripts, and
   baseline computation simpler and more reliable. FastAPI sync endpoints run in a
   threadpool.
+- **argon2-cffi** for password hashing instead of `passlib[argon2]` — passlib is
+  unmaintained and breaks on Python 3.12+ (`crypt` module removed); argon2-cffi is the
+  same argon2 backend passlib wraps, used directly.
 - **Postgres is mapped to host port `5433`** (not 5432) to avoid clashing with a
   Postgres already running on the host. Connection string in `.env`.
 - **Regions/demographics are generated deterministically** (a 5×2 kecamatan grid over

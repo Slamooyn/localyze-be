@@ -23,6 +23,7 @@ TABLES = [
     "brands",
     "regions",
     "franchise_categories",
+    "users",
 ]
 
 
@@ -70,6 +71,16 @@ def main() -> None:
             print(f"✓ grid cells: {n}")
         except ImportError:
             print("• (grid precompute not available yet — M5)")
+
+        # Demo account + sample analyses/outlets (needs grid + baselines).
+        from app.seed.demo import build_demo
+
+        print("• seeding demo account …")
+        build_demo(db)
+        u = db.execute(text("SELECT count(*) FROM users")).scalar()
+        na = db.execute(text("SELECT count(*) FROM analyses")).scalar()
+        no = db.execute(text("SELECT count(*) FROM user_outlets")).scalar()
+        print(f"✓ demo: users={u}, analyses={na}, outlets={no}")
     finally:
         db.close()
 

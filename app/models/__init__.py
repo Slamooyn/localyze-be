@@ -26,6 +26,20 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class FranchiseCategory(Base):
     __tablename__ = "franchise_categories"
 
@@ -143,6 +157,9 @@ class UserOutlet(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
     brand_id: Mapped[int | None] = mapped_column(ForeignKey("brands.id"))
     name: Mapped[str] = mapped_column(String, nullable=False)
     location = mapped_column(Geography("POINT", srid=4326, spatial_index=False), nullable=False)
@@ -160,10 +177,14 @@ class Analysis(Base):
             "verdict IN ('prime','strong','conditional','avoid')", name="chk_verdict"
         ),
         Index("idx_analyses_created", "created_at", postgresql_using="btree"),
+        Index("idx_analyses_user", "user_id", "created_at"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     name: Mapped[str | None] = mapped_column(String)
     category_id: Mapped[int] = mapped_column(

@@ -8,9 +8,10 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Analysis, FranchiseCategory, Region
+from app.models import Analysis, FranchiseCategory, Region, User
 from app.schemas import AnalyzeRequest, PatchAnalysisRequest
 from app.services import analyze as analyze_svc
+from app.services.security import get_current_user
 
 router = APIRouter(tags=["analyses"])
 
@@ -51,7 +52,11 @@ def _payload(db: Session, a: Analysis) -> dict:
 
 
 @router.post("/analyses", status_code=201)
-def create_analysis(req: AnalyzeRequest, db: Session = Depends(get_db)) -> dict:
+def create_analysis(
+    req: AnalyzeRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
     cat = db.scalar(select(FranchiseCategory).where(FranchiseCategory.slug == req.category_slug))
     if cat is None:
         raise HTTPException(
@@ -59,7 +64,7 @@ def create_analysis(req: AnalyzeRequest, db: Session = Depends(get_db)) -> dict:
         )
     try:
         res = analyze_svc.run_analysis(
-            db, req.lat, req.lng, cat, req.radius_m, req.include_cannibalization
+            db, req.lat, req.lng, cat, req.radius_m, req.include_cannibalization, user_id=user.id
         )
     except analyze_svc.OutOfCoverage:
         raise HTTPException(
@@ -74,6 +79,7 @@ def create_analysis(req: AnalyzeRequest, db: Session = Depends(get_db)) -> dict:
     name = req.name or f"{res['region']['name']}, Jakarta Selatan"
     a = Analysis(
         name=name,
+        user_id=user.id,
         category_id=cat.id,
         location=WKTElement(f"POINT({req.lng} {req.lat})", srid=4326),
         address=db_fields["address"],
@@ -95,10 +101,17 @@ def create_analysis(req: AnalyzeRequest, db: Session = Depends(get_db)) -> dict:
 
 @router.get("/analyses")
 def list_analyses(
-    limit: int = Query(20, le=100), offset: int = 0, db: Session = Depends(get_db)
+    limit: int = Query(20, le=100),
+    offset: int = 0,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[dict]:
     rows = db.scalars(
-        select(Analysis).order_by(Analysis.created_at.desc()).limit(limit).offset(offset)
+        select(Analysis)
+        .where(Analysis.user_id == user.id)
+        .order_by(Analysis.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     ).all()
     out = []
     for a in rows:
@@ -123,7 +136,11 @@ def list_analyses(
 
 
 @router.get("/analyses/compare")
-def compare(ids: str = Query(...), db: Session = Depends(get_db)) -> dict:
+def compare(
+    ids: str = Query(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
     id_list = [s.strip() for s in ids.split(",") if s.strip()][:3]
     if len(id_list) < 2:
         raise HTTPException(
@@ -131,7 +148,7 @@ def compare(ids: str = Query(...), db: Session = Depends(get_db)) -> dict:
         )
     payloads = []
     for sid in id_list:
-        a = _get_or_404(db, sid)
+        a = _get_or_404(db, sid, user)
         payloads.append(_payload(db, a))
 
     best = max(payloads, key=lambda p: p["score"]["composite"])
@@ -159,27 +176,37 @@ def compare(ids: str = Query(...), db: Session = Depends(get_db)) -> dict:
     }
 
 
-def _get_or_404(db: Session, sid: str) -> Analysis:
+def _get_or_404(db: Session, sid: str, user: User) -> Analysis:
+    not_found = HTTPException(
+        404, detail={"code": "NOT_FOUND", "message": "Analisis tidak ditemukan"}
+    )
     try:
         uid = uuid.UUID(sid)
     except ValueError:
-        raise HTTPException(404, detail={"code": "NOT_FOUND", "message": "Analisis tidak ditemukan"})
+        raise not_found
     a = db.get(Analysis, uid)
-    if a is None:
-        raise HTTPException(404, detail={"code": "NOT_FOUND", "message": "Analisis tidak ditemukan"})
+    if a is None or a.user_id != user.id:  # other users' analyses are 404, not 403
+        raise not_found
     return a
 
 
 @router.get("/analyses/{analysis_id}")
-def get_analysis(analysis_id: str, db: Session = Depends(get_db)) -> dict:
-    return _payload(db, _get_or_404(db, analysis_id))
+def get_analysis(
+    analysis_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    return _payload(db, _get_or_404(db, analysis_id, user))
 
 
 @router.patch("/analyses/{analysis_id}")
 def patch_analysis(
-    analysis_id: str, req: PatchAnalysisRequest, db: Session = Depends(get_db)
+    analysis_id: str,
+    req: PatchAnalysisRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> dict:
-    a = _get_or_404(db, analysis_id)
+    a = _get_or_404(db, analysis_id, user)
     a.name = req.name
     db.commit()
     db.refresh(a)
@@ -187,8 +214,12 @@ def patch_analysis(
 
 
 @router.delete("/analyses/{analysis_id}", status_code=204)
-def delete_analysis(analysis_id: str, db: Session = Depends(get_db)) -> Response:
-    a = _get_or_404(db, analysis_id)
+def delete_analysis(
+    analysis_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    a = _get_or_404(db, analysis_id, user)
     db.delete(a)
     db.commit()
     return Response(status_code=204)

@@ -4,7 +4,36 @@
 > **Stack:** FastAPI · base URL local: `http://localhost:8000/api/v1`
 > **Prasyarat:** `database-schema.md`, `scoring-algorithm.md`
 
-Konvensi: JSON snake_case · error format `{"detail": {"code": "...", "message": "..."}}` · semua koordinat `{lat, lng}` WGS84 · tanpa auth (MVP local single-tenant) · CORS allow `http://localhost:3000`.
+Konvensi: JSON snake_case · error format `{"detail": {"code": "...", "message": "..."}}` · semua koordinat `{lat, lng}` WGS84 · CORS allow `http://localhost:3000`.
+
+**Auth:** JWT bearer (`Authorization: Bearer <token>`). Endpoint **`/analyses*` dan `/outlets*` wajib auth** (data milik user); endpoint referensi/geospatial (`/categories`, `/regions*`, `/geocode*`, `/places`, `/discovery`, `/health`) publik. `401 {"code":"UNAUTHORIZED"}` bila token tidak ada/invalid/expired.
+
+---
+
+## 0. Auth
+
+### `POST /auth/register`
+Request: `{"name": "Moym", "email": "moym@mail.com", "password": "min8chars"}`
+Response `201`:
+
+```json
+{
+  "token": "eyJ…",
+  "user": { "id": "uuid", "name": "Moym", "email": "moym@mail.com" }
+}
+```
+
+Error `409 {"code":"EMAIL_TAKEN"}` · `422` validasi (password <8, email invalid).
+
+### `POST /auth/login`
+Request: `{"email": "...", "password": "..."}` → `200` payload sama dengan register.
+Error `401 {"code":"INVALID_CREDENTIALS"}` (pesan sama untuk email tak terdaftar vs password salah).
+
+### `GET /auth/me` 🔒
+`200 {"id","name","email","created_at"}` — dipakai FE untuk topbar/user menu.
+
+Detail token: HS256, `sub` = user id, expiry 7 hari (demo build), secret via env `JWT_SECRET`.
+Akun demo tersedia dari seed: `demo@localyze.id` / `demo1234`.
 
 ---
 
@@ -82,7 +111,9 @@ Untuk map overlay. Response GeoJSON `FeatureCollection`:
 
 ---
 
-## 4. Analysis (inti produk)
+## 4. Analysis (inti produk) 🔒
+
+Semua endpoint di bagian ini wajib bearer token; setiap analisis tersimpan milik user pembuatnya, dan list/get/compare hanya mengembalikan milik user tsb (lainnya → `404`).
 
 ### `POST /analyses`
 
@@ -168,7 +199,9 @@ Interaksi lanjutan: user klik sel → FE panggil `POST /analyses` di centroid ts
 
 ---
 
-## 6. User Outlets (Cannibalization Guard)
+## 6. User Outlets (Cannibalization Guard) 🔒
+
+Wajib bearer token — outlet ter-scope per user; cannibalization di `POST /analyses` hanya menghitung outlet milik user yang sedang login.
 
 ### `POST /outlets/import` — multipart CSV
 CSV header wajib: `name,lat,lng,address`. Response:
@@ -184,15 +217,17 @@ CSV header wajib: `name,lat,lng,address`. Response:
 
 ## 7. Ringkasan Endpoint
 
-| Method | Path | Fungsi |
-|---|---|---|
-| GET | `/health` | health check |
-| GET | `/categories` | daftar kategori + config |
-| GET | `/regions` | daftar wilayah |
-| GET | `/regions/{id}/demographics` | profil demografi |
-| GET | `/geocode` · `/reverse-geocode` | pencarian lokal |
-| GET | `/places` | overlay kompetitor/anchor (GeoJSON) |
-| POST/GET/PATCH/DELETE | `/analyses…` | analisis & riwayat |
-| GET | `/analyses/compare` | perbandingan ≤3 lokasi |
-| GET | `/discovery` | grid scan top-N + heatmap |
-| POST/GET/DELETE | `/outlets…` | import & kelola outlet sendiri |
+| Method | Path | Auth | Fungsi |
+|---|---|---|---|
+| POST | `/auth/register` · `/auth/login` | — | daftar & masuk (JWT) |
+| GET | `/auth/me` | 🔒 | profil user login |
+| GET | `/health` | — | health check |
+| GET | `/categories` | — | daftar kategori + config |
+| GET | `/regions` | — | daftar wilayah |
+| GET | `/regions/{id}/demographics` | — | profil demografi |
+| GET | `/geocode` · `/reverse-geocode` | — | pencarian lokal |
+| GET | `/places` | — | overlay kompetitor/anchor (GeoJSON) |
+| POST/GET/PATCH/DELETE | `/analyses…` | 🔒 | analisis & riwayat (per user) |
+| GET | `/analyses/compare` | 🔒 | perbandingan ≤3 lokasi |
+| GET | `/discovery` | — | grid scan top-N + heatmap |
+| POST/GET/DELETE | `/outlets…` | 🔒 | import & kelola outlet sendiri (per user) |

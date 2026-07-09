@@ -98,7 +98,7 @@ def nearest_competitor_distance(
 
 
 def user_outlets_within(
-    db: Session, lat: float, lng: float, radius_m: float
+    db: Session, lat: float, lng: float, radius_m: float, user_id: str
 ) -> list[dict]:
     rows = db.execute(
         text(
@@ -106,10 +106,10 @@ def user_outlets_within(
             SELECT o.id, o.name,
                    ST_Distance(o.location, {_POINT}) AS distance_m
             FROM user_outlets o
-            WHERE ST_DWithin(o.location, {_POINT}, :radius)
+            WHERE o.user_id = :uid AND ST_DWithin(o.location, {_POINT}, :radius)
             ORDER BY distance_m
             """
         ),
-        {"lng": lng, "lat": lat, "radius": radius_m},
+        {"lng": lng, "lat": lat, "radius": radius_m, "uid": str(user_id)},
     ).mappings().all()
     return [dict(r) for r in rows]

@@ -10,7 +10,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import UserOutlet
+from app.models import User, UserOutlet
+from app.services.security import get_current_user
 
 router = APIRouter(tags=["outlets"])
 
@@ -19,7 +20,9 @@ REQUIRED_HEADERS = {"name", "lat", "lng"}
 
 @router.post("/outlets/import")
 async def import_outlets(
-    file: UploadFile = File(...), db: Session = Depends(get_db)
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> dict:
     raw = (await file.read()).decode("utf-8-sig", errors="replace")
     reader = csv.DictReader(io.StringIO(raw))
@@ -59,6 +62,7 @@ async def import_outlets(
             continue
         db.add(
             UserOutlet(
+                user_id=user.id,
                 name=name,
                 location=WKTElement(f"POINT({lng} {lat})", srid=4326),
                 address=norm.get("address") or None,
@@ -72,13 +76,16 @@ async def import_outlets(
 
 
 @router.get("/outlets")
-def list_outlets(db: Session = Depends(get_db)) -> dict:
+def list_outlets(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> dict:
     rows = db.execute(
         text(
             "SELECT id, name, address, import_batch, "
             "ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lng "
-            "FROM user_outlets ORDER BY created_at DESC"
-        )
+            "FROM user_outlets WHERE user_id = :uid ORDER BY created_at DESC"
+        ),
+        {"uid": str(user.id)},
     ).mappings().all()
     return {
         "type": "FeatureCollection",
@@ -100,11 +107,13 @@ def list_outlets(db: Session = Depends(get_db)) -> dict:
 
 @router.delete("/outlets", status_code=200)
 def delete_outlets(
-    import_batch: str | None = Query(None), db: Session = Depends(get_db)
+    import_batch: str | None = Query(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> dict:
+    q = db.query(UserOutlet).filter(UserOutlet.user_id == user.id)
     if import_batch:
-        n = db.query(UserOutlet).filter(UserOutlet.import_batch == import_batch).delete()
-    else:
-        n = db.query(UserOutlet).delete()
+        q = q.filter(UserOutlet.import_batch == import_batch)
+    n = q.delete()
     db.commit()
     return {"deleted": n}

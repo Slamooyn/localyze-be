@@ -27,6 +27,7 @@ def run_analysis(
     category: FranchiseCategory,
     radius_m: int | None = None,
     include_cannibalization: bool = True,
+    user_id: str | None = None,
 ) -> dict:
     region = geo.point_in_region(db, lat, lng)
     if region is None:
@@ -102,9 +103,9 @@ def run_analysis(
 
     # ---------- CANNIBALIZATION ----------
     penalty, affected = 0.0, []
-    if include_cannibalization:
+    if include_cannibalization and user_id is not None:
         canni = weights["cannibalization"]
-        outlets = geo.user_outlets_within(db, lat, lng, 3 * canni["tau_m"])
+        outlets = geo.user_outlets_within(db, lat, lng, 3 * canni["tau_m"], user_id)
         penalty, affected = sc.cannibalization(outlets, canni["max_penalty"], canni["tau_m"])
 
     composite = sc.clamp(pw_d * demand + pw_c * competition - penalty)

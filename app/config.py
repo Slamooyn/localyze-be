@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     seed_mode: str = "synthetic"
     cors_origins: str = "http://localhost:3000"
     seed_version: str = "2026-07-01"
+    jwt_secret: str = "dev-secret-change-me"
+    jwt_expire_days: int = 7
 
     @property
     def cors_origin_list(self) -> list[str]:

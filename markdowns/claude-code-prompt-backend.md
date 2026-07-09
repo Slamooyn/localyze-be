@@ -19,6 +19,7 @@ sendiri dengan prinsip: sederhana > canggih, explainable > akurat.
 ## TECH STACK (fixed, jangan diganti)
 - Python 3.12, FastAPI, SQLAlchemy 2 (async) + GeoAlchemy2, Alembic, Pydantic v2
 - PostgreSQL 16 + PostGIS 3.4 via docker-compose (definisi di database-schema.md §6)
+- Auth: JWT HS256 (pyjwt) + passlib[argon2]; secret via env JWT_SECRET
 - pytest + httpx untuk test; ruff untuk lint
 - TIDAK ADA panggilan API eksternal saat runtime — semua data dari seed lokal
 
@@ -28,8 +29,9 @@ app/
   config.py          — pydantic-settings, DATABASE_URL, SEED_MODE
   models/            — SQLAlchemy models (1:1 dengan DDL di spec)
   schemas/           — Pydantic response/request models (1:1 dengan api-contract.md)
-  routers/           — health, categories, regions, geocode, places, analyses, discovery, outlets
+  routers/           — auth, health, categories, regions, geocode, places, analyses, discovery, outlets
   services/
+    security.py      — hash/verify password (argon2), create/decode JWT, dependency get_current_user
     scoring.py       — implementasi PERSIS scoring-algorithm.md (pure functions, mudah di-unit-test)
     baseline.py      — percentile baselines, dihitung saat startup dari DB, cache in-memory
     geo.py           — query PostGIS (ST_DWithin, point-in-polygon)
@@ -56,6 +58,11 @@ M4. Endpoints: geocode, reverse-geocode, places, analyses (CRUD + compare) — s
     harus mengembalikan payload lengkap sesuai kontrak dengan verdict yang masuk akal.
 M5. Grid precompute (score_grid_cells, sel 250m) sebagai step terakhir seed + GET /discovery.
 M6. Endpoint outlets (CSV import dengan validasi per baris + laporan skipped).
+M7. Auth: tabel users + /auth/register|login|me (kontrak api-contract.md §0) +
+    proteksi & scoping per-user untuk /analyses* dan /outlets* (milik user lain → 404) +
+    seed demo account demo@localyze.id/demo1234 dengan 2 analisis + 3 outlet contoh.
+    Test: register→login→me happy path; login salah → 401 pesan seragam;
+    user A tidak bisa GET analisis user B; endpoint publik tetap tanpa token.
 
 ## QUALITY BAR
 - scoring.py: pure functions tanpa I/O — semua data via parameter. Ini yang di-unit-test.
@@ -66,9 +73,12 @@ M6. Endpoint outlets (CSV import dengan validasi per baris + laporan skipped).
 - Setiap milestone: ruff clean + pytest hijau sebelum commit.
 
 ## DEMO ACCEPTANCE (cek manual di akhir)
-1. curl POST /analyses di Tebet → verdict masuk akal, breakdown lengkap, evidence bahasa Indonesia.
-2. curl GET /discovery kecamatan Kebayoran Baru → top-10 dengan skor bervariasi (bukan seragam).
-3. Import CSV 3 outlet dekat Tebet → POST /analyses yang sama → composite turun karena penalty.
+1. POST /auth/login demo@localyze.id/demo1234 → token; GET /auth/me → profil.
+2. curl POST /analyses (dengan Bearer) di Tebet → verdict masuk akal, breakdown lengkap,
+   evidence bahasa Indonesia; tanpa Bearer → 401.
+3. curl GET /discovery kecamatan Kebayoran Baru (tanpa token) → top-10 skor bervariasi.
+4. Import CSV 3 outlet dekat Tebet → POST /analyses yang sama → composite turun karena penalty.
+5. GET /analyses dengan akun demo → 2 analisis contoh dari seed muncul.
 
 Kerjakan M1 sekarang. Setelah tiap milestone, ringkas apa yang selesai + apa yang berubah
 dari spec (jika ada) sebelum lanjut.

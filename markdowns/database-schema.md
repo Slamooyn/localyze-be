@@ -354,7 +354,33 @@ CREATE INDEX idx_analyses_created ON analyses (created_at DESC);
 }
 ```
 
-### 3.8 `score_grid_cells` — precompute untuk Location Discovery
+### 3.8 `users` — auth (JWT)
+
+Auth sederhana untuk gate demo: register/login email+password, JWT bearer. Tanpa verifikasi email, tanpa reset password (out of scope MVP).
+
+```sql
+CREATE TABLE users (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name          TEXT NOT NULL,
+    email         TEXT NOT NULL UNIQUE,             -- lowercase-kan sebelum simpan
+    password_hash TEXT NOT NULL,                    -- argon2 (passlib)
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+**Kepemilikan data** — `analyses` dan `user_outlets` menjadi milik user:
+
+```sql
+ALTER TABLE analyses     ADD COLUMN user_id UUID NOT NULL REFERENCES users(id);
+ALTER TABLE user_outlets ADD COLUMN user_id UUID NOT NULL REFERENCES users(id);
+CREATE INDEX idx_analyses_user ON analyses (user_id, created_at DESC);
+```
+
+(Definisikan langsung di migration awal — ALTER di atas hanya notasi perubahan dari spec v1.)
+
+**Demo account (seed):** `demo@localyze.id` / `demo1234`, memiliki 2 analisis contoh + 3 outlet contoh — supaya reviewer yang login demo langsung melihat dashboard terisi.
+
+### 3.9 `score_grid_cells` — precompute untuk Location Discovery
 
 Grid heksagonal/persegi ~250 m yang menutupi wilayah pilot, di-precompute per kategori oleh job seed (bukan on-the-fly).
 
@@ -419,7 +445,8 @@ Urutan seed (idempotent, jalankan via `python -m app.seed`):
 4. **`places`** — dua mode:
    - `SEED_MODE=synthetic` (default): generator sintetis-realistis — kompetitor terklaster di koridor komersial (didefinisikan sebagai polyline di seed config), anchor POI di titik nyata yang di-hardcode (±80 titik: mall, stasiun MRT, kampus, gedung kantor Jaksel).
    - `SEED_MODE=google` (opsional): script tarik Google Places API sekali → simpan ke JSON → load. API key via env, hasil JSON di-commit supaya rekan tim tidak perlu key.
-5. **`score_grid_cells`** — precompute grid setelah semua data masuk.
+5. **`users`** — demo account (`demo@localyze.id` / `demo1234`) + 2 analisis contoh + 3 outlet contoh miliknya.
+6. **`score_grid_cells`** — precompute grid setelah semua data masuk.
 
 **Target volume seed:** ±400 kompetitor + ±80 anchor untuk Jaksel — cukup padat untuk demo yang meyakinkan.
 
@@ -447,7 +474,7 @@ Connection string local: `postgresql+psycopg://localyze:localyze@localhost:5432/
 
 ## 7. Out of Scope (MVP)
 
-- Tabel `users`/auth — MVP single-tenant local.
+- Reset password, verifikasi email, role/RBAC — auth MVP hanya register/login/me.
 - Time-series kompetitor (saturation velocity) — butuh snapshot berkala, Phase 2.
 - Tabel disaster risk & economic lifecycle — Phase 2 (ditampilkan sebagai teaser di UI).
 - Materialized views — volume data snapshot terlalu kecil untuk membutuhkannya.
