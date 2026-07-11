@@ -53,6 +53,11 @@ class FranchiseCategory(Base):
     default_radius_m: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1000")
     scoring_weights: Mapped[dict] = mapped_column(JSONB, nullable=False)
     target_demo_profile: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    synergy_map: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{\"complementary\": [], \"max_bonus\": 5}'::jsonb"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -101,6 +106,29 @@ class Demographics(Base):
     is_modeled: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     data_year: Mapped[int] = mapped_column(Integer, nullable=False)
     source: Mapped[str] = mapped_column(String, nullable=False)
+
+
+class DisasterRisk(Base):
+    __tablename__ = "disaster_risks"
+    __table_args__ = (
+        CheckConstraint(
+            "hazard IN ('flood','earthquake','landslide')", name="chk_hazard_enum"
+        ),
+        CheckConstraint("level BETWEEN 1 AND 5", name="chk_hazard_level"),
+        UniqueConstraint("region_id", "hazard", name="uq_disaster_region_hazard"),
+        Index("idx_disaster_region", "region_id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    region_id: Mapped[int] = mapped_column(
+        ForeignKey("regions.id"), nullable=False
+    )  # level district (kecamatan)
+    hazard: Mapped[str] = mapped_column(String, nullable=False)
+    level: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    source: Mapped[str] = mapped_column(String, nullable=False)  # 'InaRISK 2025' | 'modeled-v1'
+    data_year: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    region: Mapped[Region] = relationship()
 
 
 class Place(Base):

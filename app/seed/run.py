@@ -2,15 +2,17 @@
 
 Order (database-schema.md §5):
   1. regions + demographics
-  2. franchise_categories + brands
-  3. places (competitors + anchors)
-  4. score_grid_cells precompute (added in M5)
+  2. disaster risks per kecamatan (Phase 2)
+  3. franchise_categories + brands
+  4. places (competitors + anchors)
+  5. score_grid_cells precompute (added in M5)
 """
 from __future__ import annotations
 
 from sqlalchemy import text
 
 from app.db import SessionLocal
+from app.seed.disasters import build_disaster_risks
 from app.seed.regions import build_regions
 from app.seed.synthetic import build_brands, build_categories, build_places
 
@@ -19,6 +21,7 @@ TABLES = [
     "analyses",
     "user_outlets",
     "places",
+    "disaster_risks",
     "demographics",
     "brands",
     "regions",
@@ -39,6 +42,8 @@ def main() -> None:
         reset(db)
         print("• building regions + demographics …")
         build_regions(db)
+        print("• building disaster risks …")
+        build_disaster_risks(db)
         print("• building categories …")
         cats = build_categories(db)
         print("• building brands …")

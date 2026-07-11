@@ -26,6 +26,7 @@ def build_categories(db: Session) -> dict[str, FranchiseCategory]:
             default_radius_m=cat["default_radius_m"],
             scoring_weights=cat["scoring_weights"],
             target_demo_profile=cat["target_demo_profile"],
+            synergy_map=cat["synergy_map"],
         )
         db.add(obj)
         db.flush()

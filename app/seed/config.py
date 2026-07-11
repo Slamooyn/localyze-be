@@ -28,6 +28,28 @@ KELURAHAN_NAMES = {
 DATA_YEAR = 2024
 SNAPSHOT_DATE = "2026-07-01"
 
+# --- Phase 2 (Wave 2A): disaster risks per kecamatan ------------------------
+# InaRISK per-kecamatan index numbers are not published in a citable static form,
+# so these are modeled (labeled per spec): flood high along the river corridors
+# (Kali Pesanggrahan -> Pesanggrahan/Kebayoran Lama; Ciliwung -> Tebet/Pancoran/
+# Pasar Minggu; Kali Krukut -> Mampang/Setiabudi), earthquake uniform 2-3,
+# landslide low 1-2 (slightly higher on the southern river-valley kecamatan).
+DISASTER_SOURCE = "modeled-v1"
+DISASTER_DATA_YEAR = 2025
+DISASTER_RISKS = {
+    #                     flood  earthquake  landslide
+    "Kebayoran Baru":   {"flood": 2, "earthquake": 3, "landslide": 1},
+    "Kebayoran Lama":   {"flood": 4, "earthquake": 2, "landslide": 1},
+    "Cilandak":         {"flood": 3, "earthquake": 2, "landslide": 2},
+    "Setiabudi":        {"flood": 3, "earthquake": 3, "landslide": 1},
+    "Tebet":            {"flood": 4, "earthquake": 3, "landslide": 1},
+    "Pesanggrahan":     {"flood": 4, "earthquake": 2, "landslide": 2},
+    "Pasar Minggu":     {"flood": 3, "earthquake": 2, "landslide": 2},
+    "Jagakarsa":        {"flood": 2, "earthquake": 2, "landslide": 2},
+    "Mampang Prapatan": {"flood": 3, "earthquake": 3, "landslide": 1},
+    "Pancoran":         {"flood": 4, "earthquake": 3, "landslide": 1},
+}
+
 # Commercial corridors (lng, lat) polylines — competitors cluster along these.
 CORRIDORS = [
     [(106.823, -6.208), (106.816, -6.224), (106.807, -6.245)],   # Sudirman axis
@@ -69,6 +91,27 @@ CATEGORIES = [
             "age_weights": {"15_24": 0.35, "25_34": 0.35, "35_54": 0.20, "55_plus": 0.10},
             "min_purchasing_power_index": 0.9,
         },
+        # Phase 2: kopi <-> kantor/kampus/stasiun (phase2-backend-spec.md §1.2).
+        "synergy_map": {
+            "complementary": [
+                {
+                    "match": {"anchor_type": "office"},
+                    "weight": 1.0,
+                    "opportunity": "Partnership B2B / voucher karyawan",
+                },
+                {
+                    "match": {"anchor_type": "campus"},
+                    "weight": 0.8,
+                    "opportunity": "Promo mahasiswa & event kampus",
+                },
+                {
+                    "match": {"anchor_type": "station"},
+                    "weight": 0.6,
+                    "opportunity": "Grab-and-go komuter pagi",
+                },
+            ],
+            "max_bonus": 5,
+        },
     },
     {
         "slug": "laundry",
@@ -98,6 +141,28 @@ CATEGORIES = [
         "target_demo_profile": {
             "age_weights": {"15_24": 0.30, "25_34": 0.35, "35_54": 0.25, "55_plus": 0.10},
             "min_purchasing_power_index": 0.8,
+        },
+        # Phase 2: laundry <-> kost/apartemen/kampus (FE spec §2A.2), dipetakan ke
+        # anchor_type yang tersedia (campus/hospital/office).
+        "synergy_map": {
+            "complementary": [
+                {
+                    "match": {"anchor_type": "campus"},
+                    "weight": 1.0,
+                    "opportunity": "Paket langganan mahasiswa & kost sekitar kampus",
+                },
+                {
+                    "match": {"anchor_type": "hospital"},
+                    "weight": 0.6,
+                    "opportunity": "Kontrak linen & seragam staf rumah sakit",
+                },
+                {
+                    "match": {"anchor_type": "office"},
+                    "weight": 0.5,
+                    "opportunity": "Layanan antar-jemput pekerja kantoran",
+                },
+            ],
+            "max_bonus": 5,
         },
     },
     {
@@ -131,6 +196,28 @@ CATEGORIES = [
                 "35_54": 0.25, "55_plus": 0.15,
             },
             "min_purchasing_power_index": 0.7,
+        },
+        # Phase 2: minimarket <-> perumahan/sekolah/stasiun (FE spec §2A.2);
+        # "perumahan" sudah terwakili faktor kepadatan penduduk, sisanya ke anchor.
+        "synergy_map": {
+            "complementary": [
+                {
+                    "match": {"anchor_type": "station"},
+                    "weight": 1.0,
+                    "opportunity": "Kebutuhan harian komuter pagi-sore",
+                },
+                {
+                    "match": {"anchor_type": "school"},
+                    "weight": 0.8,
+                    "opportunity": "Jajanan & perlengkapan siswa sekolah",
+                },
+                {
+                    "match": {"anchor_type": "hospital"},
+                    "weight": 0.6,
+                    "opportunity": "Kebutuhan penunggu pasien 24 jam",
+                },
+            ],
+            "max_bonus": 5,
         },
     },
 ]
