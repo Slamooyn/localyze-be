@@ -37,6 +37,27 @@ def get_demographics(db: Session, region_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def district_disaster_risks(db: Session, region_id: int) -> list[dict]:
+    """Disaster risks for the kecamatan containing `region_id` (Phase 2).
+    disaster_risks rows live at district level; a subdistrict resolves via
+    parent_id, a district resolves to itself. Empty list = no data (data_missing)."""
+    rows = db.execute(
+        text(
+            """
+            SELECT d.hazard, d.level, d.source, d.data_year
+            FROM regions r
+            JOIN regions dist
+              ON dist.id = CASE WHEN r.level = 'district' THEN r.id ELSE r.parent_id END
+            JOIN disaster_risks d ON d.region_id = dist.id
+            WHERE r.id = :rid
+            ORDER BY d.level DESC, d.hazard
+            """
+        ),
+        {"rid": region_id},
+    ).mappings().all()
+    return [dict(r) for r in rows]
+
+
 def competitors_in_radius(
     db: Session, lat: float, lng: float, category_id: int, radius_m: int
 ) -> list[dict]:

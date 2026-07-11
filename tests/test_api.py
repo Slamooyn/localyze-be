@@ -136,6 +136,75 @@ def test_analyze_tebet_full_payload():
     assert body["breakdown"]["competition"]["competitors_in_radius"]
 
 
+def test_analyze_tebet_modifiers_contract():
+    """Phase 2: breakdown.modifiers per phase2-backend-spec.md §2 (Tebet = flood 4)."""
+    headers = register()
+    r = client.post(
+        "/api/v1/analyses",
+        json={**TEBET, "category_slug": "coffee-grab-go"},
+        headers=headers,
+    )
+    assert r.status_code == 201, r.text
+    mods = r.json()["breakdown"]["modifiers"]
+
+    dis = mods["disaster"]
+    assert dis["penalty"] > 0  # flood level 4 must penalise
+    assert dis["data_missing"] is False
+    assert dis["source"] == "modeled-v1"
+    hazards = {h["hazard"]: h for h in dis["hazards"]}
+    assert hazards["flood"]["level"] == 4
+    assert hazards["flood"]["mitigation"]  # level >= 3 -> one-sentence mitigation
+    assert hazards["landslide"]["mitigation"] is None  # level 1 -> no mitigation
+    for h in dis["hazards"]:
+        assert h["evidence"]
+        assert "mitigation" in h
+
+    syn = mods["synergy"]
+    assert 0.0 <= syn["bonus"] <= 5.0
+    for o in syn["opportunities"]:
+        for field in ("type", "count", "nearest_m", "weight_sum", "evidence", "opportunity"):
+            assert field in o
+
+
+def test_legacy_analysis_without_modifiers_still_served():
+    """Pre-Phase2 rows have no breakdown.modifiers — responses must stay valid."""
+    from sqlalchemy import text
+
+    from app.db import SessionLocal
+
+    headers = register()
+    created = client.post(
+        "/api/v1/analyses",
+        json={**TEBET, "category_slug": "coffee-grab-go"},
+        headers=headers,
+    ).json()
+    db = SessionLocal()
+    try:  # simulate a legacy (v1) analysis by stripping the new block
+        db.execute(
+            text("UPDATE analyses SET breakdown = breakdown - 'modifiers' WHERE id = :id"),
+            {"id": created["id"]},
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.get(f"/api/v1/analyses/{created['id']}", headers=headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert "modifiers" not in body["breakdown"]
+    assert body["score"]["composite"] == created["score"]["composite"]
+    # compare must also tolerate mixed legacy/v2 analyses
+    other = client.post(
+        "/api/v1/analyses",
+        json={"lat": -6.2401, "lng": 106.8100, "category_slug": "coffee-grab-go"},
+        headers=headers,
+    ).json()
+    cmp = client.get(
+        f"/api/v1/analyses/compare?ids={created['id']},{other['id']}", headers=headers
+    )
+    assert cmp.status_code == 200
+
+
 def test_out_of_coverage():
     headers = register()
     r = client.post(

@@ -20,6 +20,78 @@ def _num(x) -> float:
     return float(x) if x is not None else 0.0
 
 
+# --- Phase 2 (Wave 2A): presentation strings for breakdown.modifiers ---------
+HAZARD_LABELS = {"flood": "banjir", "earthquake": "gempa", "landslide": "longsor"}
+HAZARD_LEVEL_DESC = {
+    1: "sangat rendah",
+    2: "rendah",
+    3: "sedang",
+    4: "tinggi",
+    5: "sangat tinggi",
+}
+# One-sentence mitigation, shown for hazards level >= 3 (FE spec §2A.1).
+HAZARD_MITIGATIONS = {
+    "flood": "Pertimbangkan unit lantai 2 atau asuransi banjir",
+    "earthquake": "Pastikan bangunan memenuhi standar tahan gempa (SNI 1726)",
+    "landslide": "Hindari unit di tepi lereng dan cek stabilitas tanah sebelum sewa",
+}
+ANCHOR_TYPE_LABELS = {
+    "office": "gedung kantor",
+    "mall": "mall",
+    "campus": "kampus",
+    "school": "sekolah",
+    "station": "stasiun",
+    "hospital": "rumah sakit",
+}
+
+
+def build_modifiers(
+    risks: list[dict],
+    disaster_pen: float,
+    risk_missing: bool,
+    syn_bonus: float,
+    syn_groups: list[dict],
+    radius: int,
+) -> dict:
+    """breakdown.modifiers block — contract in phase2-backend-spec.md §2."""
+    hazards = []
+    for r in risks:
+        label = HAZARD_LABELS.get(r["hazard"], r["hazard"])
+        desc = HAZARD_LEVEL_DESC.get(r["level"], "")
+        hazards.append(
+            {
+                "hazard": r["hazard"],
+                "level": r["level"],
+                "evidence": (
+                    f"Risiko {label} level {r['level']} ({r['source']} {r['data_year']}) "
+                    f"— tingkat {desc} di kecamatan ini"
+                ),
+                "mitigation": (
+                    HAZARD_MITIGATIONS.get(r["hazard"]) if r["level"] >= 3 else None
+                ),
+            }
+        )
+    opportunities = [
+        {
+            **g,
+            "evidence": (
+                f"{g['count']} {ANCHOR_TYPE_LABELS.get(g['type'], g['type'])} "
+                f"dalam {radius} m"
+            ),
+        }
+        for g in syn_groups
+    ]
+    return {
+        "disaster": {
+            "penalty": round(disaster_pen, 2),
+            "hazards": hazards,
+            "source": risks[0]["source"] if risks else None,
+            "data_missing": risk_missing,
+        },
+        "synergy": {"bonus": round(syn_bonus, 2), "opportunities": opportunities},
+    }
+
+
 def run_analysis(
     db: Session,
     lat: float,
@@ -108,7 +180,21 @@ def run_analysis(
         outlets = geo.user_outlets_within(db, lat, lng, 3 * canni["tau_m"], user_id)
         penalty, affected = sc.cannibalization(outlets, canni["max_penalty"], canni["tau_m"])
 
-    composite = sc.clamp(pw_d * demand + pw_c * competition - penalty)
+    # ---------- MODIFIERS (Phase 2: disaster + synergy) ----------
+    risks = geo.district_disaster_risks(db, region["id"])
+    disaster_pen, risk_missing = sc.disaster_penalty(
+        [(r["hazard"], r["level"]) for r in risks]
+    )
+    syn_bonus, syn_groups = sc.synergy_bonus(
+        [(a["distance_m"], a["anchor_type"]) for a in anchors],
+        category.synergy_map,
+        tau,
+    )
+
+    # composite v2 (phase2-backend-spec.md §2)
+    composite = sc.clamp(
+        pw_d * demand + pw_c * competition - penalty - disaster_pen + syn_bonus
+    )
     verdict = sc.to_verdict(composite)
 
     snap = db_snapshot_date(db)
@@ -120,6 +206,7 @@ def run_analysis(
             snapshot_age_days=age_days,
             competitor_count=len(comps),
             region_level=region["level"],
+            risk_data_missing=risk_missing,
         )
     )
 
@@ -195,6 +282,9 @@ def run_analysis(
             "competitors_in_radius": competitors_in_radius,
         },
         "cannibalization": {"penalty": round(penalty, 2), "affected_outlets": affected},
+        "modifiers": build_modifiers(
+            risks, disaster_pen, risk_missing, syn_bonus, syn_groups, radius
+        ),
         "data_completeness": {
             "demographics_available": demo is not None,
             "purchasing_power_modeled": pp_modeled,
@@ -286,7 +376,22 @@ def score_point(
         {"weighted_density": c1, "per_capita_intensity": c2, "nearest_distance": c3},
     )
 
-    composite = sc.clamp(pillars["demand"] * demand + pillars["competition"] * competition)
+    # Phase 2 modifiers — both deterministic per point, so the grid includes them
+    # (phase2-backend-spec.md §2). Cannibalization stays out (per-user).
+    risks = geo.district_disaster_risks(db, region["id"])
+    disaster_pen, _ = sc.disaster_penalty([(r["hazard"], r["level"]) for r in risks])
+    syn_bonus, _ = sc.synergy_bonus(
+        [(a["distance_m"], a["anchor_type"]) for a in anchors],
+        category.synergy_map,
+        tau,
+    )
+
+    composite = sc.clamp(
+        pillars["demand"] * demand
+        + pillars["competition"] * competition
+        - disaster_pen
+        + syn_bonus
+    )
     return round(composite, 2), round(demand, 2), round(competition, 2)
 
 

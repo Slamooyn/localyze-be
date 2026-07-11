@@ -8,6 +8,8 @@ Urutan baca untuk memahami sistem:
 1. **`database-schema.md`** — skema data lengkap: ERD, DDL 8 tabel (PostGIS), strategi seed data lokal (synthetic + snapshot Google Places opsional), docker-compose.
 2. **`scoring-algorithm.md`** — formula Localyze Score: distance decay, normalisasi persentil, demand & competition index, cannibalization penalty, confidence, grid scan Discovery.
 3. **`api-contract.md`** — kontrak seluruh endpoint `/api/v1` (request/response shapes, dipakai FE sebagai source of truth types).
-4. **`claude-code-prompt-backend.md`** — prompt siap jalan di Claude Code untuk implementasi (milestone M1–M6 + acceptance criteria).
+4. **`claude-code-prompt-backend.md`** — prompt siap jalan di Claude Code untuk implementasi (milestone M1–M7 + acceptance criteria).
+5. **`phase2-backend-spec.md`** — Wave 2A: tabel `disaster_risks`, `synergy_map`, composite v2 (modifiers), endpoint risks/choropleth/memo PDF.
+6. **`claude-code-prompt-phase2-backend.md`** — prompt Phase 2 BE (P1–P4), dijalankan setelah MVP stabil.
 
 Keputusan arsitektur kunci: snapshot-first (tanpa API eksternal saat runtime), semua parameter scoring di tabel `franchise_categories` (bukan hard-code), local dev penuh via Docker Compose, auth JWT sederhana (register/login + akun demo `demo@localyze.id`) dengan scoping data per user untuk analyses & outlets.

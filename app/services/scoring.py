@@ -12,6 +12,13 @@ from dataclasses import dataclass
 
 VERDICT_BANDS = [(80.0, "prime"), (65.0, "strong"), (50.0, "conditional")]
 
+# Phase 2 (Wave 2A) — disaster modifier parameters (phase2-backend-spec.md §2).
+# Global across all categories, so they live as module constants like VERDICT_BANDS
+# (category-specific parameters stay in the franchise_categories JSONB columns).
+HAZARD_WEIGHTS = {"flood": 1.0, "earthquake": 0.6, "landslide": 0.5}
+DISASTER_PENALTY_SCALE = 10.0  # P_disaster range 0..10
+RISK_DATA_MISSING_CONFIDENCE_DROP = 0.05
+
 
 def clamp(v: float, lo: float = 0.0, hi: float = 100.0) -> float:
     return max(lo, min(hi, v))
@@ -82,6 +89,56 @@ def cannibalization(
     return round(penalty, 2), affected
 
 
+def disaster_penalty(
+    hazards: list[tuple[str, int]],
+    hazard_weights: dict | None = None,
+    scale: float = DISASTER_PENALTY_SCALE,
+) -> tuple[float, bool]:
+    """P_disaster 0..scale (phase2-backend-spec.md §2):
+    max_over_hazards(level_norm × hazard_weight) × scale, level_norm = (level−1)/4.
+    `hazards` = [(hazard, level 1-5), …]. Kecamatan without data → (0, data_missing=True)
+    — the caller lowers confidence by RISK_DATA_MISSING_CONFIDENCE_DROP."""
+    weights = HAZARD_WEIGHTS if hazard_weights is None else hazard_weights
+    if not hazards:
+        return 0.0, True
+    worst = max(
+        ((level - 1) / 4.0) * weights.get(hazard, 0.0) for hazard, level in hazards
+    )
+    return round(clamp(worst * scale, 0.0, scale), 2), False
+
+
+def synergy_bonus(
+    anchors: list[tuple[float, str]], synergy_map: dict, tau_m: float
+) -> tuple[float, list[dict]]:
+    """B_synergy 0..max_bonus (phase2-backend-spec.md §2):
+    min(max_bonus, Σ weight_i × exp(−d_i/τ)) over complementary anchors in radius.
+    `anchors` = [(distance_m, anchor_type), …]; `synergy_map` is the category JSONB.
+    Returns (bonus, opportunities[]) — one group per matched complementary type with
+    count / nearest_m / weight_sum / opportunity (evidence sentence added by caller)."""
+    max_bonus = float(synergy_map.get("max_bonus", 5))
+    total = 0.0
+    groups: list[dict] = []
+    for entry in synergy_map.get("complementary", []):
+        atype = entry.get("match", {}).get("anchor_type")
+        weight = float(entry.get("weight", 0.0))
+        matched = [d for d, t in anchors if t == atype]
+        if not matched:
+            continue
+        weight_sum = sum(weight * decay_weight(d, tau_m) for d in matched)
+        total += weight_sum
+        groups.append(
+            {
+                "type": atype,
+                "count": len(matched),
+                "nearest_m": round(min(matched)),
+                "weight_sum": round(weight_sum, 2),
+                "opportunity": entry.get("opportunity"),
+            }
+        )
+    groups.sort(key=lambda g: g["weight_sum"], reverse=True)
+    return round(min(max_bonus, total), 2), groups
+
+
 @dataclass
 class ConfidenceCtx:
     has_demographics: bool = True
@@ -89,6 +146,7 @@ class ConfidenceCtx:
     snapshot_age_days: int = 0
     competitor_count: int = 0
     region_level: str = "subdistrict"
+    risk_data_missing: bool = False  # Phase 2: kecamatan without disaster data
 
 
 def confidence(ctx: ConfidenceCtx) -> float:
@@ -103,6 +161,8 @@ def confidence(ctx: ConfidenceCtx) -> float:
         score -= 0.15
     if ctx.region_level == "district":
         score -= 0.10
+    if ctx.risk_data_missing:
+        score -= RISK_DATA_MISSING_CONFIDENCE_DROP
     return max(0.3, round(score, 2))
 
 
